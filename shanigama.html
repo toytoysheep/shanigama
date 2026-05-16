@@ -447,6 +447,19 @@
         ref.set({ overrides: ov }).catch(e => console.error("fb save ov", e));
       }
 
+      async function fbLoadGcalSettings() {
+        const ref = fbUserDoc(["settings", "gcal"]);
+        if (!ref) return null;
+        const snap = await ref.get();
+        return snap.exists ? snap.data() : null;
+      }
+
+      function fbSaveGcalSettings(clientId, selectedIds) {
+        const ref = fbUserDoc(["settings", "gcal"]);
+        if (!ref) return;
+        ref.set({ clientId, selectedIds }).catch(e => console.error("fb save gcal", e));
+      }
+
       // Firebase 初期化（起動時に自動実行）
       useEffect(() => {
         try {
@@ -501,13 +514,23 @@
         if (!fbUser) return;
         (async () => {
           try {
-            const [fbOv, fbDay] = await Promise.all([fbLoadOv(), fbLoadDay(dateStr)]);
+            const [fbOv, fbDay, fbGcal] = await Promise.all([fbLoadOv(), fbLoadDay(dateStr), fbLoadGcalSettings()]);
             if (fbOv) { setOverrides(fbOv); saveOverrides(fbOv); }
             if (fbDay && fbDay.tasks) {
               setTasks(fbDay.tasks);
               setActiveTaskId(fbDay.activeTaskId || null);
               setAllDoneTime(fbDay.allDoneTime || null);
               saveTodayData(dateStr, fbDay);
+            }
+            if (fbGcal) {
+              if (fbGcal.clientId) {
+                setGcalClientId(fbGcal.clientId);
+                localStorage.setItem("shanigama:gcal_client_id", fbGcal.clientId);
+              }
+              if (fbGcal.selectedIds?.length) {
+                setGcalSelectedIds(fbGcal.selectedIds);
+                localStorage.setItem("shanigama:gcal_selected_ids", JSON.stringify(fbGcal.selectedIds));
+              }
             }
           } catch(e) { console.error("fb initial load", e); }
         })();
@@ -636,6 +659,7 @@
         if (!id) return;
         localStorage.setItem("shanigama:gcal_client_id", id);
         setGcalClientId(id);
+        fbSaveGcalSettings(id, gcalSelectedIds);
         setShowGcalSetup(false);
         handleGcalSync(id);
       }
@@ -843,6 +867,7 @@
                 <div style={styles.gcalModalBtns}>
                   <button style={styles.addConfirmBtn} onClick={() => {
                     localStorage.setItem("shanigama:gcal_selected_ids", JSON.stringify(gcalSelectedIds));
+                    fbSaveGcalSettings(gcalClientId, gcalSelectedIds);
                     setShowCalendarPicker(false);
                     doGcalSync(gcalTokenRef.current, gcalSelectedIds);
                   }}>同期する</button>
