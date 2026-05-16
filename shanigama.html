@@ -311,6 +311,7 @@
       const [showFbSetup, setShowFbSetup] = useState(false);
       const fbDbRef = useRef(null);
       const fbSaveTimerRef = useRef(null);
+      const gcalAutoSyncDone = useRef(false);
 
       const dateStr = todayStr();
       const dow = getDayOfWeek();
@@ -351,6 +352,39 @@
           setAllDoneTime(Date.now());
         }
       }, [tasks, loaded]);
+
+      // 起動時に自動でGcal同期を試みる
+      useEffect(() => {
+        if (!loaded) return;
+        if (!gcalClientId) return;
+        if (!gcalSelectedIds.length) return;
+        if (gcalAutoSyncDone.current) return;
+        if (!window.google?.accounts?.oauth2) return;
+        gcalAutoSyncDone.current = true;
+        setGcalSyncing(true);
+        setGcalResult(null);
+        window.google.accounts.oauth2.initTokenClient({
+          client_id: gcalClientId,
+          scope: "https://www.googleapis.com/auth/calendar.readonly",
+          prompt: "",
+          callback: async (response) => {
+            if (response.error) {
+              setGcalResult({ error: "auto", message: response.error });
+              setGcalSyncing(false);
+              return;
+            }
+            gcalTokenRef.current = response.access_token;
+            try {
+              const calendars = await fetchCalendarList(response.access_token);
+              setGcalCalendarList(calendars);
+              await doGcalSync(response.access_token, gcalSelectedIds);
+            } catch(e) {
+              setGcalResult({ error: "auto", message: e.message });
+              setGcalSyncing(false);
+            }
+          },
+        }).requestAccessToken({ prompt: "" });
+      }, [loaded, gcalClientId]);
 
       useEffect(() => {
         if (!loaded) return;
@@ -762,7 +796,7 @@
           {gcalResult && (
             <div style={{...styles.gcalResultBar, ...(gcalResult.error ? styles.gcalResultError : styles.gcalResultOk)}}>
               {gcalResult.error
-                ? `❌ ${gcalResult.error}`
+                ? <span>📅 カレンダーを同期できませんでした　<button style={{...styles.gcalResultClose, border:"1px solid #f87171", borderRadius:4, padding:"2px 8px", fontSize:12}} onClick={() => { setGcalResult(null); handleGcalSync(); }}>再試行</button></span>
                 : `✅ Googleカレンダーから ${gcalResult.count} 件の予定を追加しました`}
               <button style={styles.gcalResultClose} onClick={() => setGcalResult(null)}>×</button>
             </div>
