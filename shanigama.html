@@ -296,6 +296,13 @@
       const [gcalResult, setGcalResult] = useState(null);
       const [showGcalSetup, setShowGcalSetup] = useState(false);
       const [gcalClientIdInput, setGcalClientIdInput] = useState("");
+      const [gcalSelectedIds, setGcalSelectedIds] = useState(() => {
+        const s = localStorage.getItem("shanigama:gcal_selected_ids");
+        return s ? JSON.parse(s) : [];
+      });
+      const [gcalCalendarList, setGcalCalendarList] = useState([]);
+      const [showCalendarPicker, setShowCalendarPicker] = useState(false);
+      const gcalTokenRef = useRef(null);
 
       // Firebase
       const [fbUser, setFbUser] = useState(null);
@@ -508,11 +515,20 @@
       // ─────────────────────────────────────────────────
 
       // ── Google Calendar ──────────────────────────────
-      async function fetchTodayCalendarEvents(accessToken) {
+      async function fetchCalendarList(accessToken) {
+        const res = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (!res.ok) throw new Error(`CalendarList API ${res.status}`);
+        const data = await res.json();
+        return (data.items || []).filter(c => c.accessRole !== "none");
+      }
+
+      async function fetchTodayCalendarEvents(accessToken, calendarId = "primary") {
         const d = new Date();
         const timeMin = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
         const timeMax = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59).toISOString();
-        const url = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
+        const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
         url.searchParams.set("timeMin", timeMin);
         url.searchParams.set("timeMax", timeMax);
         url.searchParams.set("singleEvents", "true");
@@ -521,6 +537,26 @@
         if (!res.ok) throw new Error(`Calendar API ${res.status}`);
         const data = await res.json();
         return data.items || [];
+      }
+
+      async function doGcalSync(accessToken, selectedIds) {
+        setGcalSyncing(true);
+        try {
+          const results = await Promise.all(
+            selectedIds.map(id => fetchTodayCalendarEvents(accessToken, id).catch(() => []))
+          );
+          const events = results.flat();
+          const newTasks = events.map(calendarEventToTask).filter(Boolean);
+          setTasks(prev => {
+            const existingIds = new Set(prev.filter(t => t.gcalEventId).map(t => t.gcalEventId));
+            const toAdd = newTasks.filter(t => !existingIds.has(t.gcalEventId));
+            return [...prev, ...toAdd];
+          });
+          setGcalResult({ count: newTasks.length });
+        } catch(e) {
+          setGcalResult({ error: e.message });
+        }
+        setGcalSyncing(false);
       }
 
       function calendarEventToTask(event) {
@@ -573,19 +609,23 @@
               setGcalSyncing(false);
               return;
             }
+            gcalTokenRef.current = response.access_token;
             try {
-              const events = await fetchTodayCalendarEvents(response.access_token);
-              const newTasks = events.map(calendarEventToTask).filter(Boolean);
-              setTasks(prev => {
-                const existingIds = new Set(prev.filter(t => t.gcalEventId).map(t => t.gcalEventId));
-                const toAdd = newTasks.filter(t => !existingIds.has(t.gcalEventId));
-                return [...prev, ...toAdd];
-              });
-              setGcalResult({ count: newTasks.length });
+              const calendars = await fetchCalendarList(response.access_token);
+              setGcalCalendarList(calendars);
+              const saved = gcalSelectedIds;
+              if (saved.length === 0) {
+                // 初回：全カレンダーを選択状態でピッカーを表示
+                setGcalSelectedIds(calendars.map(c => c.id));
+                setShowCalendarPicker(true);
+                setGcalSyncing(false);
+              } else {
+                await doGcalSync(response.access_token, saved);
+              }
             } catch(e) {
               setGcalResult({ error: e.message });
+              setGcalSyncing(false);
             }
-            setGcalSyncing(false);
           },
         }).requestAccessToken();
       }
@@ -726,9 +766,49 @@
                 {gcalClientId && (
                   <div style={styles.gcalCurrentId}>現在: {gcalClientId.slice(0, 30)}…</div>
                 )}
+                {gcalSelectedIds.length > 0 && (
+                  <div style={{fontSize:11, color:"#475569", marginBottom:8}}>
+                    取り込み中: {gcalSelectedIds.length}カレンダー
+                    <button
+                      style={{marginLeft:8, background:"transparent", border:"1px solid #334155", borderRadius:4, color:"#94a3b8", fontSize:11, cursor:"pointer", padding:"1px 6px"}}
+                      onClick={() => { localStorage.removeItem("shanigama:gcal_selected_ids"); setGcalSelectedIds([]); setShowGcalSetup(false); handleGcalSync(); }}
+                    >再選択</button>
+                  </div>
+                )}
                 <div style={styles.gcalModalBtns}>
                   <button style={styles.addConfirmBtn} onClick={saveGcalClientId}>保存して同期</button>
                   <button style={styles.addCancelBtn} onClick={() => setShowGcalSetup(false)}>キャンセル</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCalendarPicker && (
+            <div style={styles.gcalOverlay}>
+              <div style={styles.gcalModal}>
+                <div style={styles.gcalModalTitle}>📅 取り込むカレンダーを選択</div>
+                <div style={{marginBottom:16}}>
+                  {gcalCalendarList.map(cal => (
+                    <label key={cal.id} style={{display:"flex", alignItems:"center", gap:8, marginBottom:10, cursor:"pointer"}}>
+                      <input
+                        type="checkbox"
+                        checked={gcalSelectedIds.includes(cal.id)}
+                        onChange={e => setGcalSelectedIds(prev =>
+                          e.target.checked ? [...prev, cal.id] : prev.filter(id => id !== cal.id)
+                        )}
+                      />
+                      <span style={{display:"inline-block", width:12, height:12, borderRadius:"50%", background: cal.backgroundColor || "#38bdf8", flexShrink:0}}/>
+                      <span style={{fontSize:13, color:"#e2e8f0"}}>{cal.summary}</span>
+                    </label>
+                  ))}
+                </div>
+                <div style={styles.gcalModalBtns}>
+                  <button style={styles.addConfirmBtn} onClick={() => {
+                    localStorage.setItem("shanigama:gcal_selected_ids", JSON.stringify(gcalSelectedIds));
+                    setShowCalendarPicker(false);
+                    doGcalSync(gcalTokenRef.current, gcalSelectedIds);
+                  }}>同期する</button>
+                  <button style={styles.addCancelBtn} onClick={() => setShowCalendarPicker(false)}>キャンセル</button>
                 </div>
               </div>
             </div>
