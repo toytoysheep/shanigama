@@ -449,37 +449,44 @@
           const auth = firebase.auth(app);
           setFbStatus("connecting");
 
-          // ユーザー状態の監視のみ（ここでリダイレクトしない）
+          // ユーザー状態の監視のみ（自動リダイレクトしない）
           auth.onAuthStateChanged(user => {
             if (user) {
-              sessionStorage.removeItem("shanigama:auth");
               setFbUser(user);
               setFbStatus("synced");
+            } else {
+              setFbStatus("disconnected");
             }
           });
 
-          // リダイレクト結果を処理してからサインインを判定
+          // リダイレクト方式で戻ってきた場合の処理
           auth.getRedirectResult()
-            .then(result => {
-              if (!result?.user) {
-                // リダイレクト由来のユーザーなし
-                // onAuthStateChanged がキャッシュセッションで発火するのを待つ
-                setTimeout(() => {
-                  if (!auth.currentUser && !sessionStorage.getItem("shanigama:auth")) {
-                    sessionStorage.setItem("shanigama:auth", "1");
-                    auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
-                  }
-                }, 800);
-              }
-            })
+            .then(result => { /* onAuthStateChanged が処理する */ })
             .catch(e => {
-              sessionStorage.removeItem("shanigama:auth");
-              setFbStatus("error:" + e.code);
+              if (e.code !== "auth/no-auth-event") setFbStatus("error:" + e.code);
             });
         } catch(e) {
           setFbStatus("error:" + e.message);
         }
       }, []);
+
+      function handleFbSignIn() {
+        try {
+          const auth = firebase.auth(firebase.app("shanigama"));
+          const provider = new firebase.auth.GoogleAuthProvider();
+          // ユーザー操作起点のポップアップ（ブロックされにくい）
+          auth.signInWithPopup(provider).catch(e => {
+            // ポップアップがブロックされた場合のみリダイレクトへフォールバック
+            if (e.code === "auth/popup-blocked" || e.code === "auth/popup-closed-by-user") {
+              auth.signInWithRedirect(provider);
+            } else {
+              setFbStatus("error:" + e.code);
+            }
+          });
+        } catch(e) {
+          setFbStatus("error:" + e.message);
+        }
+      }
 
       // ログイン後に Firebase からデータを取得してローカルを上書き
       useEffect(() => {
@@ -623,7 +630,7 @@
             <div style={styles.headerRight}>
               <button
                 style={{...styles.gcalBtn, ...(fbStatus==="synced" ? styles.fbBtnSynced : fbStatus.startsWith("error") ? styles.fbBtnError : {})}}
-                onClick={() => setShowFbSetup(true)}
+                onClick={() => fbStatus === "synced" ? setShowFbSetup(true) : handleFbSignIn()}
                 title={fbStatus === "synced" ? `同期中: ${fbUser?.displayName || fbUser?.email}` : fbStatus === "connecting" ? "接続中..." : "Firebaseを設定"}
               >
                 {fbStatus === "synced" ? "🔥" : fbStatus === "connecting" ? "⏳" : "☁️"}
