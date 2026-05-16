@@ -362,21 +362,22 @@
         if (gcalAutoSyncDone.current) return;
         if (!window.google?.accounts?.oauth2) return;
         gcalAutoSyncDone.current = true;
-        setGcalSyncing(true);
         setGcalResult(null);
+        let autoCallbackFired = false;
         const autoSyncTimer = setTimeout(() => {
-          setGcalSyncing(false);
-          setGcalResult({ error: "timeout" });
-        }, 10000);
+          if (!autoCallbackFired) {
+            setGcalResult({ error: "timeout" });
+          }
+        }, 12000);
         window.google.accounts.oauth2.initTokenClient({
           client_id: gcalClientId,
           scope: "https://www.googleapis.com/auth/calendar.readonly",
           prompt: "",
           callback: async (response) => {
+            autoCallbackFired = true;
             clearTimeout(autoSyncTimer);
             if (response.error) {
               setGcalResult({ error: "auto" });
-              setGcalSyncing(false);
               return;
             }
             gcalTokenRef.current = response.access_token;
@@ -386,7 +387,6 @@
               await doGcalSync(response.access_token, gcalSelectedIds);
             } catch(e) {
               setGcalResult({ error: "auto" });
-              setGcalSyncing(false);
             }
           },
         }).requestAccessToken({ prompt: "" });
