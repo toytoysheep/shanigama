@@ -526,13 +526,20 @@
       function calendarEventToTask(event) {
         const startStr = event.start?.dateTime;
         const endStr = event.end?.dateTime;
-        if (!startStr) return null; // 終日イベントはスキップ
-        const start = new Date(startStr);
-        const end = endStr ? new Date(endStr) : null;
-        const startHour = start.getHours() + start.getMinutes() / 60;
-        const block = BLOCKS.find(b => startHour >= b.start && startHour < b.end);
+        const isAllDay = !startStr && !!event.start?.date;
+        let block, estMin;
+        if (isAllDay) {
+          block = BLOCKS.find(b => b.id === "4-6");
+          estMin = 30;
+        } else {
+          if (!startStr) return null;
+          const start = new Date(startStr);
+          const end = endStr ? new Date(endStr) : null;
+          const startHour = start.getHours() + start.getMinutes() / 60;
+          block = BLOCKS.find(b => startHour >= b.start && startHour < b.end);
+          estMin = end ? Math.max(1, Math.round((end - start) / 60000)) : 30;
+        }
         if (!block) return null;
-        const estMin = end ? Math.max(1, Math.round((end - start) / 60000)) : 30;
         return {
           id: `gcal_${event.id}_${todayStr()}`,
           repeatId: null,
