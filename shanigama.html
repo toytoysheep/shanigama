@@ -606,7 +606,7 @@
             <div style={styles.headerRight}>
               <button
                 style={{...styles.gcalBtn, ...(fbStatus==="synced" ? styles.fbBtnSynced : fbStatus.startsWith("error") ? styles.fbBtnError : {})}}
-                onClick={() => { if (!fbConfig) { setFbConfigInput(""); setShowFbSetup(true); } else setShowFbSetup(true); }}
+                onClick={() => setShowFbSetup(true)}
                 title={fbStatus === "synced" ? `同期中: ${fbUser?.displayName || fbUser?.email}` : fbStatus === "connecting" ? "接続中..." : "Firebaseを設定"}
               >
                 {fbStatus === "synced" ? "🔥" : fbStatus === "connecting" ? "⏳" : "☁️"}
