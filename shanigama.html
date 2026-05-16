@@ -353,9 +353,10 @@
         }
       }, [tasks, loaded]);
 
-      // 起動時に自動でGcal同期を試みる
+      // 起動時に自動でGcal同期を試みる（Firebase接続確定後に実行）
       useEffect(() => {
         if (!loaded) return;
+        if (fbStatus === "connecting") return; // Firebase接続待ち
         if (!gcalClientId) return;
         if (!gcalSelectedIds.length) return;
         if (gcalAutoSyncDone.current) return;
@@ -384,7 +385,7 @@
             }
           },
         }).requestAccessToken({ prompt: "" });
-      }, [loaded, gcalClientId]);
+      }, [loaded, gcalClientId, fbStatus]);
 
       useEffect(() => {
         if (!loaded) return;
