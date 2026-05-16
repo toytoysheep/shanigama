@@ -22,6 +22,16 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyCD28r2awkgEx4BzUpEwzd_fdoULmSYx2A",
+      authDomain: "shanigama-2d407.firebaseapp.com",
+      projectId: "shanigama-2d407",
+      storageBucket: "shanigama-2d407.firebasestorage.app",
+      messagingSenderId: "726466400026",
+      appId: "1:726466400026:web:d136e25b772ce244ab66a3",
+      measurementId: "G-36S2HNFCGK",
+    };
+
     const BLOCKS = [
       { id: "4-6",   label: "4〜6",   title: "起床前",                    start: 4,  end: 6  },
       { id: "6-8",   label: "6〜8",   title: "朝の準備",                  start: 6,  end: 8  },
@@ -288,13 +298,9 @@
       const [gcalClientIdInput, setGcalClientIdInput] = useState("");
 
       // Firebase
-      const [fbConfig, setFbConfig] = useState(() => {
-        try { return JSON.parse(localStorage.getItem("shanigama:fb_config") || "null"); } catch { return null; }
-      });
       const [fbUser, setFbUser] = useState(null);
       const [fbStatus, setFbStatus] = useState("disconnected"); // disconnected | connecting | synced | error
       const [showFbSetup, setShowFbSetup] = useState(false);
-      const [fbConfigInput, setFbConfigInput] = useState("");
       const fbDbRef = useRef(null);
       const fbSaveTimerRef = useRef(null);
 
@@ -433,13 +439,12 @@
         ref.set({ overrides: ov }).catch(e => console.error("fb save ov", e));
       }
 
-      // Firebase 初期化
+      // Firebase 初期化（起動時に自動実行）
       useEffect(() => {
-        if (!fbConfig) return;
         try {
           let app;
           try { app = firebase.app("shanigama"); }
-          catch { app = firebase.initializeApp(fbConfig, "shanigama"); }
+          catch { app = firebase.initializeApp(FIREBASE_CONFIG, "shanigama"); }
           fbDbRef.current = firebase.firestore(app);
           const auth = firebase.auth(app);
           setFbStatus("connecting");
@@ -455,7 +460,7 @@
         } catch(e) {
           setFbStatus("error:" + e.message);
         }
-      }, [fbConfig]);
+      }, []);
 
       // ログイン後に Firebase からデータを取得してローカルを上書き
       useEffect(() => {
@@ -474,14 +479,6 @@
         })();
       }, [fbUser]);
 
-      function saveFbConfig() {
-        try {
-          const cfg = JSON.parse(fbConfigInput.trim());
-          localStorage.setItem("shanigama:fb_config", JSON.stringify(cfg));
-          setFbConfig(cfg);
-          setShowFbSetup(false);
-        } catch { alert("JSONの形式が正しくありません"); }
-      }
       // ─────────────────────────────────────────────────
 
       // ── Google Calendar ──────────────────────────────
@@ -694,31 +691,22 @@
           {showFbSetup && (
             <div style={styles.gcalOverlay}>
               <div style={styles.gcalModal}>
-                <div style={styles.gcalModalTitle}>🔥 Firebase 同期設定</div>
-                {fbStatus === "synced" && (
+                <div style={styles.gcalModalTitle}>🔥 Firebase 同期ステータス</div>
+                {fbStatus === "synced" ? (
                   <div style={{...styles.gcalModalStep, color:"#34d399", marginBottom:12}}>
-                    ✅ 同期中: {fbUser?.displayName || fbUser?.email}
+                    ✅ 同期中<br/>{fbUser?.displayName || fbUser?.email}
+                  </div>
+                ) : fbStatus === "connecting" ? (
+                  <div style={{...styles.gcalModalStep, color:"#fbbf24", marginBottom:12}}>
+                    ⏳ 接続中...
+                  </div>
+                ) : (
+                  <div style={{...styles.gcalModalStep, color:"#f87171", marginBottom:12}}>
+                    ❌ {fbStatus}
                   </div>
                 )}
-                <div style={styles.gcalModalSection}>
-                  <div style={styles.gcalModalStep}>① <a href="https://console.firebase.google.com/" target="_blank" style={styles.gcalLink}>Firebase Console</a> でプロジェクトを作成</div>
-                  <div style={styles.gcalModalStep}>② 「Firestore Database」を作成（本番モード）</div>
-                  <div style={styles.gcalModalStep}>③ 「Authentication」→「Google」を有効化</div>
-                  <div style={styles.gcalModalStep}>④ 「プロジェクトの設定」→「ウェブアプリを追加」→ 設定オブジェクトをコピー</div>
-                  <div style={styles.gcalModalStep}>⑤ Firestore「ルール」を以下に変更して公開：</div>
-                  <div style={styles.gcalModalCode}>{`rules_version = '2';\nservice cloud.firestore {\n  match /databases/{db}/documents {\n    match /users/{uid}/{doc=**} {\n      allow read, write: if request.auth.uid == uid;\n    }\n  }\n}`}</div>
-                  <div style={styles.gcalModalStep}>⑥ 以下に firebaseConfig の JSON を貼り付け</div>
-                </div>
-                <textarea
-                  style={styles.fbTextarea}
-                  placeholder={`{\n  "apiKey": "...",\n  "authDomain": "...",\n  "projectId": "..."\n  ...\n}`}
-                  value={fbConfigInput}
-                  onChange={e => setFbConfigInput(e.target.value)}
-                  rows={6}
-                />
                 <div style={styles.gcalModalBtns}>
-                  <button style={styles.addConfirmBtn} onClick={saveFbConfig}>保存して接続</button>
-                  <button style={styles.addCancelBtn} onClick={() => setShowFbSetup(false)}>キャンセル</button>
+                  <button style={styles.addCancelBtn} onClick={() => setShowFbSetup(false)}>閉じる</button>
                 </div>
               </div>
             </div>
