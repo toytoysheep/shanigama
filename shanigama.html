@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>しゃにがま</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f172a; }
+    ::-webkit-scrollbar { display: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const BLOCKS = [
+      { id: "4-6",   label: "4〜6",   title: "起床前",                    start: 4,  end: 6  },
+      { id: "6-8",   label: "6〜8",   title: "朝の準備",                  start: 6,  end: 8  },
+      { id: "8-10",  label: "8〜10",  title: "仕事ファーストタイム",       start: 8,  end: 10 },
+      { id: "10-12", label: "10〜12", title: "仕事の充実時間",             start: 10, end: 12 },
+      { id: "12-13", label: "12〜13", title: "お昼休み",                   start: 12, end: 13 },
+      { id: "13-14", label: "13〜14", title: "午後イチはゆるめに",         start: 13, end: 14 },
+      { id: "14-16", label: "14〜16", title: "眠気に耐えて仕事",           start: 14, end: 16 },
+      { id: "16-17", label: "16〜17", title: "夕方のもうひとふんばり",     start: 16, end: 17 },
+      { id: "17-18", label: "17〜18", title: "夕方の休憩",                 start: 17, end: 18 },
+      { id: "18-20", label: "18〜20", title: "仕事と家事のボーダー",       start: 18, end: 20 },
+      { id: "20-22", label: "20〜22", title: "家事に集中",                 start: 20, end: 22 },
+      { id: "22-0",  label: "22〜0",  title: "睡眠タイム",                 start: 22, end: 24 },
+    ];
+
+    const ALL = [0,1,2,3,4,5,6];
+
+    const CAT_COLOR = {
+      "生活":      "#60a5fa",
+      "身だしなみ": "#f472b6",
+      "掃除":      "#34d399",
+      "改善強化":  "#fbbf24",
+      "メンタル":  "#a78bfa",
+      "体力":      "#fb923c",
+      "仕事":      "#38bdf8",
+      "その他":    "#94a3b8",
+    };
+
+    const REPEAT_TASKS = [
+      { id:"r001", title:"窓から積雪量を確認する",         block:"6-8",  days:[1,2,3,4,5], cat:"生活",      est:1  },
+      { id:"r002", title:"❤️ マインドフルネス呼吸する",   block:"6-8",  days:ALL,          cat:"メンタル",  est:5  },
+      { id:"r003", title:"小",                             block:"6-8",  days:ALL,          cat:"生活",      est:1  },
+      { id:"r004", title:"常温の水を飲む",                 block:"6-8",  days:ALL,          cat:"生活",      est:1  },
+      { id:"r005", title:"💧 シャワー（予洗い）",         block:"6-8",  days:[1,2,3,4,5,6],cat:"身だしなみ", est:26 },
+      { id:"r006", title:"ドライヤーをする",               block:"6-8",  days:ALL,          cat:"身だしなみ", est:2  },
+      { id:"r007", title:"オールインワン・日焼け止め塗る", block:"6-8",  days:ALL,          cat:"身だしなみ", est:6  },
+      { id:"r008", title:"デオドラントをする",             block:"6-8",  days:[1,2,3,4,5,6],cat:"身だしなみ", est:1  },
+      { id:"r009", title:"ひげを剃る",                     block:"6-8",  days:[1,2,3,4,5],  cat:"身だしなみ", est:3  },
+      { id:"r010", title:"ぬるま湯で顔を洗う",             block:"6-8",  days:ALL,          cat:"身だしなみ", est:2  },
+      { id:"r011", title:"鏡で自分の顔と向き合う",         block:"6-8",  days:ALL,          cat:"身だしなみ", est:1  },
+      { id:"r012", title:"メガネをふく",                   block:"6-8",  days:ALL,          cat:"生活",      est:1  },
+      { id:"r013", title:"腰をストレッチする",             block:"6-8",  days:ALL,          cat:"体力",      est:2  },
+      { id:"r014", title:"🌈 天気予報チェック",           block:"6-8",  days:ALL,          cat:"生活",      est:1  },
+      { id:"r015", title:"洗濯機かける（枕カバー）07:00", block:"6-8",  days:ALL,          cat:"生活",      est:1  },
+      { id:"r016", title:"🍞 朝食（p20g）をとる",        block:"6-8",  days:ALL,          cat:"生活",      est:7  },
+      { id:"r017", title:"薬とQP（1錠）を飲む",           block:"6-8",  days:ALL,          cat:"生活",      est:1  },
+      { id:"r018", title:"フロスかける",                   block:"6-8",  days:ALL,          cat:"身だしなみ", est:3  },
+      { id:"r019", title:"歯磨き（舌も）をする",           block:"6-8",  days:ALL,          cat:"身だしなみ", est:6  },
+      { id:"r020", title:"食後の口をコンクールでゆすぐ",   block:"6-8",  days:ALL,          cat:"身だしなみ", est:1  },
+      { id:"r021", title:"カーテンを開ける（けつじょう！）",block:"6-8", days:ALL,          cat:"掃除",      est:1  },
+      { id:"r022", title:"ベッドメイキング",               block:"6-8",  days:ALL,          cat:"掃除",      est:1  },
+      { id:"r023", title:"🧘 深呼吸する",                 block:"6-8",  days:ALL,          cat:"メンタル",  est:10 },
+      { id:"r024", title:"洗濯機から物干しに干す",         block:"6-8",  days:ALL,          cat:"生活",      est:10 },
+      { id:"r025", title:"大",                             block:"6-8",  days:ALL,          cat:"生活",      est:6  },
+      { id:"r026", title:"EufyLiteに乗る（±1キロ目標）", block:"6-8",  days:ALL,          cat:"体力",      est:1  },
+      { id:"r027", title:"📅 カレンダーで予定確認する",  block:"6-8",  days:ALL,          cat:"生活",      est:2  },
+      { id:"r028", title:"名言集をみる",                   block:"6-8",  days:ALL,          cat:"改善強化",  est:1  },
+      { id:"r029", title:"not to do listを見る",           block:"6-8",  days:[1,2,3,4,5],  cat:"改善強化",  est:1  },
+      { id:"r030", title:"疲労度チェック（おめざめ）",     block:"6-8",  days:ALL,          cat:"生活",      est:1  },
+      { id:"r031", title:"髪をセットする",                 block:"6-8",  days:ALL,          cat:"身だしなみ", est:5  },
+      { id:"r032", title:"😊 笑顔",                       block:"6-8",  days:ALL,          cat:"メンタル",  est:1  },
+      { id:"r033", title:"燃えるゴミの日（寒さトレ）07:40",block:"6-8", days:[1,4],        cat:"生活",      est:3  },
+      { id:"r034", title:"プラスチックごみ（寒さトレ）07:40",block:"6-8",days:[3],         cat:"生活",      est:3  },
+      { id:"r035", title:"食器を洗う・食器を拭いて元の場所に戻す（朝）",block:"6-8",days:ALL,cat:"掃除",   est:10 },
+      { id:"r036", title:"リマインダーの反応しないを見る", block:"6-8",  days:ALL,          cat:"改善強化",  est:1  },
+      { id:"r037", title:"★前日の未着手タスクを整理する", block:"6-8",  days:ALL,          cat:"掃除",      est:2  },
+      { id:"r038", title:"シーツ・台所タオル・洗面タオルを洗濯する",block:"6-8",days:[0,6],cat:"掃除",      est:1  },
+      { id:"r039", title:"布団カバーを洗濯する",           block:"6-8",  days:[6],          cat:"掃除",      est:2  },
+      { id:"r040", title:"水筒にコーヒー＆ルイボスティー淹れる 08:00",block:"8-10",days:[1,2,3,4,5],cat:"生活",est:8},
+      { id:"r041", title:"職場への持ち物を確認する 08:12",block:"8-10",days:[1,2,3,4,5],cat:"生活",est:1},
+      { id:"r042", title:"スーツリフレッシャーかける 08:14",block:"8-10",days:[1,2,3,4,5],cat:"身だしなみ",est:1},
+      { id:"r043", title:"💪 スクワット10回＝10回x2セット 08:15",block:"8-10",days:ALL,cat:"体力",est:1},
+      { id:"r044", title:"🚗 車で通勤する（夏15分冬18分）08:20",block:"8-10",days:[1,2,3,4,5],cat:"生活",est:15},
+      { id:"r045", title:"ハンドクリームでハンドケア",block:"8-10",days:ALL,cat:"身だしなみ",est:1},
+      { id:"r046", title:"💋 リップケア",block:"8-10",days:ALL,cat:"身だしなみ",est:1},
+      { id:"r047", title:"やりたいことを見る",block:"8-10",days:[6],cat:"改善強化",est:1},
+      { id:"r048", title:"😊 笑顔",block:"8-10",days:ALL,cat:"メンタル",est:1},
+      { id:"r049", title:"🕐 【オフライン→オンライン】就業1分前 08:44",block:"8-10",days:[1,2,3,4,5],cat:"仕事",est:1},
+      { id:"r050", title:"疲労度チェック 08-10",block:"8-10",days:ALL,cat:"生活",est:1},
+      { id:"r051", title:"🧘 深呼吸する",block:"8-10",days:ALL,cat:"メンタル",est:1},
+      { id:"r052", title:"ワイシャツにアイロンする（一枚あたり）",block:"8-10",days:[6],cat:"生活",est:10},
+      { id:"r060", title:"😊 笑顔",block:"10-12",days:ALL,cat:"メンタル",est:1},
+      { id:"r061", title:"疲労度チェック 10-12",block:"10-12",days:ALL,cat:"生活",est:1},
+      { id:"r062", title:"🧘 深呼吸する",block:"10-12",days:ALL,cat:"メンタル",est:1},
+      { id:"r063", title:"💊 リーマスらを薬入れに補充",block:"10-12",days:[6],cat:"生活",est:1},
+      { id:"r064", title:"風呂のヘアキャッチャー交換する",block:"10-12",days:[6],cat:"掃除",est:2},
+      { id:"r070", title:"散歩する（水曜ならどこまで行こうかな）12:10",block:"12-13",days:[1,2,3,4,5],cat:"体力",est:25},
+      { id:"r071", title:"公園一周",block:"12-13",days:[1,2,3,4,5],cat:"体力",est:5},
+      { id:"r072", title:"🥇 わたしはわたしを肯定する",block:"12-13",days:ALL,cat:"メンタル",est:1},
+      { id:"r073", title:"📖 5分読書する",block:"12-13",days:ALL,cat:"改善強化",est:5},
+      { id:"r074", title:"😴 睡眠と心拍数をアプリでチェックする",block:"12-13",days:ALL,cat:"メンタル",est:1},
+      { id:"r075", title:"🍙 ★おにぎり＆トマトジュース（ゆでたまご）",block:"12-13",days:ALL,cat:"生活",est:10},
+      { id:"r076", title:"💪 昼食後に肩甲骨をストレッチする",block:"12-13",days:[1,2,3,4,5],cat:"体力",est:1},
+      { id:"r077", title:"😊 笑顔",block:"12-13",days:ALL,cat:"メンタル",est:1},
+      { id:"r078", title:"💪 スクワット20回＝10回x2セット 12:45",block:"12-13",days:ALL,cat:"体力",est:1},
+      { id:"r079", title:"疲労度チェック 12-13",block:"12-13",days:ALL,cat:"生活",est:1},
+      { id:"r080", title:"📅 待受のカレンダー更新",block:"12-13",days:ALL,cat:"生活",est:1},
+      { id:"r081", title:"🧘 深呼吸する",block:"12-13",days:ALL,cat:"メンタル",est:1},
+      { id:"r082", title:"📖 読書する",block:"12-13",days:ALL,cat:"改善強化",est:15},
+      { id:"r083", title:"やりたいことを昼休みにやる 12:43",block:"12-13",days:[1,2,3,4,5],cat:"改善強化",est:1},
+      { id:"r084", title:"🕐 午後の業務1分前 12:59",block:"12-13",days:[1,2,3,4,5],cat:"仕事",est:1},
+      { id:"r085", title:"承認ができている自分をイメージする",block:"12-13",days:ALL,cat:"メンタル",est:1},
+      { id:"r086", title:"元妻に連絡事項あればメールする",block:"12-13",days:[1,2,3,4,5],cat:"生活",est:1},
+      { id:"r090", title:"疲労度チェック 13-14",block:"13-14",days:ALL,cat:"生活",est:1},
+      { id:"r091", title:"🧘 深呼吸する",block:"13-14",days:ALL,cat:"メンタル",est:1},
+      { id:"r092", title:"😊 まゆ毛整える",block:"13-14",days:[6],cat:"身だしなみ",est:10},
+      { id:"r100", title:"おやつ（チーズメイン）15:15",block:"14-16",days:[1,2,3,4,5],cat:"生活",est:1},
+      { id:"r101", title:"🧘 深呼吸する",block:"14-16",days:ALL,cat:"メンタル",est:1},
+      { id:"r102", title:"疲労度チェック 14-16",block:"14-16",days:ALL,cat:"生活",est:1},
+      { id:"r103", title:"😊 笑顔",block:"14-16",days:ALL,cat:"メンタル",est:1},
+      { id:"r110", title:"疲労度チェック 16-17",block:"16-17",days:ALL,cat:"生活",est:1},
+      { id:"r111", title:"洗面所掃除",block:"16-17",days:[0],cat:"掃除",est:5},
+      { id:"r112", title:"【夜】風呂の排水溝掃除する",block:"16-17",days:ALL,cat:"掃除",est:25},
+      { id:"r113", title:"🧘 深呼吸する",block:"16-17",days:ALL,cat:"メンタル",est:1},
+      { id:"r114", title:"😊 笑顔",block:"16-17",days:ALL,cat:"メンタル",est:1},
+      { id:"r120", title:"夕方休憩はきちんと休憩しよう 17:32",block:"17-18",days:[1,2,3,4,5],cat:"改善強化",est:10},
+      { id:"r121", title:"🧘 深呼吸する",block:"17-18",days:ALL,cat:"メンタル",est:1},
+      { id:"r122", title:"iPhoneのリマインダの目的をみる",block:"17-18",days:ALL,cat:"改善強化",est:1},
+      { id:"r123", title:"疲労度チェック 17-18",block:"17-18",days:ALL,cat:"生活",est:1},
+      { id:"r124", title:"💼 残業する（★帰れ社畜！★）17:45",block:"17-18",days:[1,2,3,4,5],cat:"仕事",est:72},
+      { id:"r125", title:"🏇 競馬の収支をつける",block:"17-18",days:[0],cat:"その他",est:1},
+      { id:"r126", title:"🚗 車にガソリンを入れる",block:"17-18",days:[6],cat:"生活",est:3},
+      { id:"r127", title:"🛍 居間のゴミ袋を交換する",block:"17-18",days:[1],cat:"掃除",est:1},
+      { id:"r130", title:"【実質アーカイブ】腕立て伏せ10回",block:"18-20",days:ALL,cat:"体力",est:1},
+      { id:"r131", title:"トイレ掃除（マスク・キッチン泡ハイター）",block:"18-20",days:ALL,cat:"掃除",est:20},
+      { id:"r132", title:"玄関のものをひとつ捨てる",block:"18-20",days:ALL,cat:"掃除",est:1},
+      { id:"r133", title:"洗濯物をタンスに入れる",block:"18-20",days:ALL,cat:"生活",est:3},
+      { id:"r134", title:"【夜】風呂のお湯を入れる",block:"18-20",days:ALL,cat:"生活",est:1},
+      { id:"r135", title:"🍚【米抜き】晩飯をよく噛んで食べる",block:"18-20",days:ALL,cat:"生活",est:15},
+      { id:"r136", title:"疲労度チェック 18-20",block:"18-20",days:ALL,cat:"生活",est:1},
+      { id:"r137", title:"🧘 深呼吸する",block:"18-20",days:ALL,cat:"メンタル",est:1},
+      { id:"r138", title:"😊 笑顔",block:"18-20",days:ALL,cat:"メンタル",est:1},
+      { id:"r139", title:"not to do listを見る",block:"18-20",days:[1,2,3,4,5],cat:"改善強化",est:1},
+      { id:"r140", title:"給与明細をクリアファイルに入れる",block:"18-20",days:ALL,cat:"生活",est:1},
+      { id:"r150", title:"☆★☆5分間掃除する",block:"20-22",days:ALL,cat:"掃除",est:5},
+      { id:"r151", title:"📖 読書する",block:"20-22",days:ALL,cat:"改善強化",est:5},
+      { id:"r152", title:"【夜】翌日の予定を作成し順番・開始時刻を微調整する 20:45",block:"20-22",days:ALL,cat:"生活",est:2},
+      { id:"r153", title:"【夜】teams・Outlookを確認する 20:30",block:"20-22",days:ALL,cat:"仕事",est:1},
+      { id:"r154", title:"🔧【chatGPTと対話】デイリーメンテをする",block:"20-22",days:ALL,cat:"改善強化",est:10},
+      { id:"r155", title:"水筒をつけ置き洗いする",block:"20-22",days:[6],cat:"生活",est:1},
+      { id:"r156", title:"🛁【夜】風呂に入る",block:"20-22",days:ALL,cat:"身だしなみ",est:30},
+      { id:"r157", title:"🧘 深呼吸する",block:"20-22",days:ALL,cat:"メンタル",est:1},
+      { id:"r158", title:"🍀【夜】（先手必勝）食器を洗う",block:"20-22",days:ALL,cat:"掃除",est:18},
+      { id:"r159", title:"😊 笑顔",block:"20-22",days:ALL,cat:"メンタル",est:1},
+      { id:"r160", title:"【夜】今日も一日紗妃に感謝する",block:"20-22",days:ALL,cat:"メンタル",est:1},
+      { id:"r161", title:"疲労度チェック 20-22",block:"20-22",days:ALL,cat:"生活",est:1},
+      { id:"r162", title:"台所の水切りネット交換する 20:30",block:"20-22",days:[0,3],cat:"生活",est:1},
+      { id:"r163", title:"爪を切る（爪やすり）",block:"20-22",days:[6],cat:"身だしなみ",est:5},
+      { id:"r164", title:"天気予報チェック",block:"20-22",days:ALL,cat:"生活",est:1},
+      { id:"r165", title:"スプレッドシートに家計を記載する 20:30",block:"20-22",days:ALL,cat:"生活",est:3},
+      { id:"r166", title:"クイックルワイパーかける",block:"20-22",days:ALL,cat:"掃除",est:1},
+      { id:"r167", title:"💊【夜】食後のリーマスを飲む 20:05",block:"20-22",days:ALL,cat:"メンタル",est:1},
+      { id:"r168", title:"😊 まゆ毛整える",block:"20-22",days:ALL,cat:"身だしなみ",est:1},
+      { id:"r169", title:"【夜】歯磨きをする 21:00",block:"20-22",days:ALL,cat:"身だしなみ",est:5},
+      { id:"r170", title:"週一の浴室掃除（白ブラシ）",block:"20-22",days:[6],cat:"掃除",est:7},
+      { id:"r171", title:"部屋のお手入れ（掃除機・クイックルワイパー・コロコロ含む）",block:"20-22",days:ALL,cat:"掃除",est:5},
+      { id:"r172", title:"【週次】シンク周りの掃除",block:"20-22",days:[6],cat:"掃除",est:15},
+      { id:"r180", title:"ー【夜】フロスかける",block:"22-0",days:ALL,cat:"身だしなみ",est:3},
+      { id:"r181", title:"└【夜】口をコンクールで洗う",block:"22-0",days:ALL,cat:"身だしなみ",est:1},
+      { id:"r182", title:"寝室に行く（睡眠準備）22:25",block:"22-0",days:ALL,cat:"生活",est:1},
+      { id:"r183", title:"🐻 たすくまのバックアップを取る",block:"22-0",days:[0],cat:"生活",est:4},
+    ];
+
+    // localStorage ストレージ
+    function loadTodayData(dateStr) {
+      try {
+        const raw = localStorage.getItem(`shanigama:${dateStr}`);
+        return raw ? JSON.parse(raw) : null;
+      } catch { return null; }
+    }
+
+    function saveTodayData(dateStr, data) {
+      try {
+        localStorage.setItem(`shanigama:${dateStr}`, JSON.stringify(data));
+      } catch (e) { console.error("save error", e); }
+    }
+
+    // ユーティリティ
+    function todayStr() {
+      const d = new Date();
+      return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+    }
+
+    function getDayOfWeek() { return new Date().getDay(); }
+    function currentHour() { return new Date().getHours(); }
+
+    function timeStr(ms) {
+      if (!ms) return "";
+      const d = new Date(ms);
+      return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    }
+
+    function elapsedStr(startMs) {
+      const ms = Date.now() - startMs;
+      const m = Math.floor(ms / 60000);
+      if (m < 60) return `${m}分`;
+      return `${Math.floor(m/60)}時間${m%60}分`;
+    }
+
+    function generateTodayTasks(dow) {
+      return REPEAT_TASKS
+        .filter(t => t.days.includes(dow))
+        .map(t => ({
+          id: `${todayStr()}_${t.id}`,
+          repeatId: t.id,
+          title: t.title,
+          block: t.block,
+          cat: t.cat,
+          est: t.est,
+          done: false,
+          startTime: null,
+          endTime: null,
+          skipped: false,
+        }));
+    }
+
+    // メインコンポーネント
+    function Shanigama() {
+      const [tasks, setTasks] = useState([]);
+      const [activeTaskId, setActiveTaskId] = useState(null);
+      const [loaded, setLoaded] = useState(false);
+      const [now, setNow] = useState(new Date());
+      const [selectedBlock, setSelectedBlock] = useState(null);
+      const [addingTask, setAddingTask] = useState(false);
+      const [newTaskTitle, setNewTaskTitle] = useState("");
+      const [newTaskEst, setNewTaskEst] = useState(5);
+
+      const dateStr = todayStr();
+      const dow = getDayOfWeek();
+      const DOW_LABEL = ["日","月","火","水","木","金","土"];
+
+      useEffect(() => {
+        const t = setInterval(() => setNow(new Date()), 30000);
+        return () => clearInterval(t);
+      }, []);
+
+      useEffect(() => {
+        const saved = loadTodayData(dateStr);
+        if (saved && saved.tasks) {
+          setTasks(saved.tasks);
+          setActiveTaskId(saved.activeTaskId || null);
+        } else {
+          setTasks(generateTodayTasks(dow));
+        }
+        setLoaded(true);
+      }, []);
+
+      useEffect(() => {
+        if (!loaded) return;
+        saveTodayData(dateStr, { tasks, activeTaskId });
+      }, [tasks, activeTaskId, loaded]);
+
+      useEffect(() => {
+        if (!loaded) return;
+        const h = currentHour();
+        const current = BLOCKS.find(b => h >= b.start && h < b.end);
+        if (current && !selectedBlock) setSelectedBlock(current.id);
+      }, [loaded]);
+
+      function startTask(taskId) {
+        const t = Date.now();
+        if (activeTaskId && activeTaskId !== taskId) {
+          setTasks(prev => prev.map(tk =>
+            tk.id === activeTaskId ? { ...tk, done: true, endTime: t } : tk
+          ));
+        }
+        setTasks(prev => prev.map(tk =>
+          tk.id === taskId ? { ...tk, startTime: t, endTime: null, done: false } : tk
+        ));
+        setActiveTaskId(taskId);
+      }
+
+      function completeTask(taskId) {
+        const t = Date.now();
+        setTasks(prev => prev.map(tk =>
+          tk.id === taskId ? { ...tk, done: true, endTime: tk.endTime || t } : tk
+        ));
+        if (activeTaskId === taskId) setActiveTaskId(null);
+      }
+
+      function skipTask(taskId) {
+        setTasks(prev => prev.map(tk =>
+          tk.id === taskId ? { ...tk, skipped: true, done: true } : tk
+        ));
+        if (activeTaskId === taskId) setActiveTaskId(null);
+      }
+
+      function undoTask(taskId) {
+        setTasks(prev => prev.map(tk =>
+          tk.id === taskId
+            ? { ...tk, done: false, skipped: false, startTime: null, endTime: null }
+            : tk
+        ));
+      }
+
+      function addTask() {
+        if (!newTaskTitle.trim() || !selectedBlock) return;
+        const newTask = {
+          id: `${dateStr}_custom_${Date.now()}`,
+          repeatId: null,
+          title: newTaskTitle.trim(),
+          block: selectedBlock,
+          cat: "その他",
+          est: newTaskEst,
+          done: false,
+          startTime: null,
+          endTime: null,
+          skipped: false,
+        };
+        setTasks(prev => [...prev, newTask]);
+        setNewTaskTitle("");
+        setNewTaskEst(5);
+        setAddingTask(false);
+      }
+
+      const blockTasks = (blockId) =>
+        tasks.filter(t => t.block === blockId && !t.skipped);
+
+      const doneCount = tasks.filter(t => t.done && !t.skipped).length;
+      const totalCount = tasks.filter(t => !t.skipped).length;
+      const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+      const activeTask = tasks.find(t => t.id === activeTaskId);
+      const h = now.getHours();
+      const currentBlock = BLOCKS.find(b => h >= b.start && h < b.end);
+
+      if (!loaded) {
+        return (
+          <div style={styles.loading}>
+            <div style={styles.loadingText}>しゃにがま 起動中...</div>
+          </div>
+        );
+      }
+
+      return (
+        <div style={styles.root}>
+          <div style={styles.header}>
+            <div style={styles.headerLeft}>
+              <div style={styles.appName}>しゃにがま</div>
+              <div style={styles.dateLabel}>
+                {now.getFullYear()}/{now.getMonth()+1}/{now.getDate()}（{DOW_LABEL[dow]}）
+                {"　"}
+                {String(now.getHours()).padStart(2,"0")}:{String(now.getMinutes()).padStart(2,"0")}
+              </div>
+            </div>
+            <div style={styles.headerRight}>
+              <div style={styles.progressCircle}>
+                <svg width="56" height="56" viewBox="0 0 56 56">
+                  <circle cx="28" cy="28" r="24" fill="none" stroke="#1e293b" strokeWidth="4"/>
+                  <circle cx="28" cy="28" r="24" fill="none" stroke="#38bdf8" strokeWidth="4"
+                    strokeDasharray={`${2*Math.PI*24}`}
+                    strokeDashoffset={`${2*Math.PI*24*(1-progress/100)}`}
+                    strokeLinecap="round"
+                    transform="rotate(-90 28 28)"
+                    style={{transition:"stroke-dashoffset 0.5s"}}
+                  />
+                  <text x="28" y="33" textAnchor="middle" fill="#e2e8f0" fontSize="13" fontWeight="bold">
+                    {progress}%
+                  </text>
+                </svg>
+              </div>
+              <div style={styles.countLabel}>{doneCount}/{totalCount}</div>
+            </div>
+          </div>
+
+          {activeTask && (
+            <div style={styles.activeBar}>
+              <div style={styles.activeIcon}>▶</div>
+              <div style={styles.activeInfo}>
+                <div style={styles.activeTitle}>{activeTask.title}</div>
+                <div style={styles.activeTime}>
+                  {timeStr(activeTask.startTime)} 〜 {elapsedStr(activeTask.startTime)} 経過
+                </div>
+              </div>
+              <button style={styles.activeDoneBtn} onClick={() => completeTask(activeTask.id)}>
+                完了
+              </button>
+            </div>
+          )}
+
+          <div style={styles.blockNav}>
+            {BLOCKS.map(b => {
+              const btasks = blockTasks(b.id);
+              const bdone = btasks.filter(t=>t.done).length;
+              const isCurrent = currentBlock && currentBlock.id === b.id;
+              const isSelected = selectedBlock === b.id;
+              return (
+                <button
+                  key={b.id}
+                  style={{
+                    ...styles.blockNavBtn,
+                    ...(isSelected ? styles.blockNavBtnActive : {}),
+                    ...(isCurrent ? styles.blockNavBtnCurrent : {}),
+                  }}
+                  onClick={() => setSelectedBlock(b.id)}
+                >
+                  <div style={styles.blockNavLabel}>{b.label}</div>
+                  <div style={styles.blockNavCount}>{bdone}/{btasks.length}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedBlock && (() => {
+            const block = BLOCKS.find(b => b.id === selectedBlock);
+            const btasks = blockTasks(selectedBlock);
+            const skipped = tasks.filter(t => t.block === selectedBlock && t.skipped);
+            return (
+              <div style={styles.blockDetail}>
+                <div style={styles.blockDetailHeader}>
+                  <div>
+                    <div style={styles.blockDetailTitle}>
+                      {block.label}　{block.title}
+                    </div>
+                    <div style={styles.blockDetailSub}>
+                      {btasks.filter(t=>t.done).length}/{btasks.length} 完了
+                    </div>
+                  </div>
+                  <button style={styles.addBtn} onClick={() => setAddingTask(true)}>
+                    ＋ タスク追加
+                  </button>
+                </div>
+
+                {addingTask && (
+                  <div style={styles.addForm}>
+                    <input
+                      style={styles.addInput}
+                      placeholder="タスク名"
+                      value={newTaskTitle}
+                      onChange={e => setNewTaskTitle(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && addTask()}
+                      autoFocus
+                    />
+                    <div style={styles.addFormRow}>
+                      <input
+                        style={styles.addEstInput}
+                        type="number"
+                        value={newTaskEst}
+                        min={1} max={180}
+                        onChange={e => setNewTaskEst(Number(e.target.value))}
+                      />
+                      <span style={styles.addEstLabel}>分</span>
+                      <button style={styles.addConfirmBtn} onClick={addTask}>追加</button>
+                      <button style={styles.addCancelBtn} onClick={() => setAddingTask(false)}>キャンセル</button>
+                    </div>
+                  </div>
+                )}
+
+                {btasks.length === 0 && (
+                  <div style={styles.emptyBlock}>今日このブロックにタスクはありません</div>
+                )}
+                {btasks.map(task => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    isActive={task.id === activeTaskId}
+                    onStart={() => startTask(task.id)}
+                    onComplete={() => completeTask(task.id)}
+                    onSkip={() => skipTask(task.id)}
+                    onUndo={() => undoTask(task.id)}
+                  />
+                ))}
+
+                {skipped.length > 0 && (
+                  <div style={styles.skippedSection}>
+                    <div style={styles.skippedLabel}>スキップ ({skipped.length})</div>
+                    {skipped.map(task => (
+                      <div key={task.id} style={styles.skippedRow}>
+                        <span style={styles.skippedTitle}>{task.title}</span>
+                        <button style={styles.undoBtn} onClick={() => undoTask(task.id)}>戻す</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      );
+    }
+
+    // タスク行コンポーネント
+    function TaskRow({ task, isActive, onStart, onComplete, onSkip, onUndo }) {
+      const catColor = CAT_COLOR[task.cat] || CAT_COLOR["その他"];
+
+      if (task.done && !task.skipped) {
+        return (
+          <div style={styles.taskRowDone}>
+            <div style={{...styles.catDot, background: catColor}} />
+            <div style={styles.taskDoneInfo}>
+              <span style={styles.taskDoneTitle}>{task.title}</span>
+              <span style={styles.taskDoneTime}>
+                {task.startTime ? `${timeStr(task.startTime)}〜${timeStr(task.endTime)}` : "完了"}
+              </span>
+            </div>
+            <button style={styles.undoBtn} onClick={onUndo}>↩</button>
+          </div>
+        );
+      }
+
+      return (
+        <div style={{
+          ...styles.taskRow,
+          ...(isActive ? styles.taskRowActive : {}),
+        }}>
+          <div style={{...styles.catDot, background: catColor}} />
+          <div style={styles.taskInfo}>
+            <div style={styles.taskTitle}>{task.title}</div>
+            <div style={styles.taskMeta}>
+              <span style={styles.catTag}>{task.cat}</span>
+              <span style={styles.estTag}>{task.est}分</span>
+              {isActive && task.startTime && (
+                <span style={styles.runningTag}>実行中 {timeStr(task.startTime)}〜</span>
+              )}
+            </div>
+          </div>
+          <div style={styles.taskActions}>
+            {!isActive && (
+              <button style={styles.startBtn} onClick={onStart}>▶</button>
+            )}
+            {isActive && (
+              <button style={styles.completeBtn} onClick={onComplete}>✓</button>
+            )}
+            <button style={styles.skipBtn} onClick={onSkip}>—</button>
+          </div>
+        </div>
+      );
+    }
+
+    // スタイル
+    const styles = {
+      root: {
+        minHeight: "100vh",
+        background: "#0f172a",
+        color: "#e2e8f0",
+        fontFamily: "'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif",
+        paddingBottom: 40,
+      },
+      loading: {
+        display:"flex", alignItems:"center", justifyContent:"center",
+        height:"100vh", background:"#0f172a",
+      },
+      loadingText: { color:"#38bdf8", fontSize:18 },
+      header: {
+        display:"flex", justifyContent:"space-between", alignItems:"center",
+        padding:"16px 20px 12px",
+        borderBottom:"1px solid #1e293b",
+        background:"#0f172a",
+        position:"sticky", top:0, zIndex:100,
+      },
+      headerLeft: {},
+      appName: {
+        fontSize:22, fontWeight:700, color:"#38bdf8",
+        letterSpacing:"0.05em",
+      },
+      dateLabel: { fontSize:12, color:"#64748b", marginTop:2 },
+      headerRight: { display:"flex", alignItems:"center", gap:8 },
+      progressCircle: {},
+      countLabel: { fontSize:12, color:"#94a3b8" },
+      activeBar: {
+        display:"flex", alignItems:"center", gap:12,
+        background:"#1e3a5f",
+        padding:"10px 16px",
+        borderBottom:"1px solid #38bdf8",
+      },
+      activeIcon: { color:"#38bdf8", fontSize:14 },
+      activeInfo: { flex:1 },
+      activeTitle: { fontSize:13, fontWeight:600, color:"#e2e8f0" },
+      activeTime: { fontSize:11, color:"#94a3b8", marginTop:2 },
+      activeDoneBtn: {
+        background:"#38bdf8", color:"#0f172a",
+        border:"none", borderRadius:6, padding:"4px 12px",
+        fontSize:12, fontWeight:700, cursor:"pointer",
+      },
+      blockNav: {
+        display:"flex", overflowX:"auto",
+        gap:6, padding:"10px 16px",
+        borderBottom:"1px solid #1e293b",
+        scrollbarWidth:"none",
+      },
+      blockNavBtn: {
+        flexShrink:0,
+        background:"#1e293b", border:"1px solid #334155",
+        borderRadius:8, padding:"6px 10px",
+        cursor:"pointer", textAlign:"center",
+        minWidth:60,
+      },
+      blockNavBtnActive: {
+        background:"#1e3a5f", borderColor:"#38bdf8",
+      },
+      blockNavBtnCurrent: {
+        borderColor:"#fbbf24",
+      },
+      blockNavLabel: { fontSize:11, color:"#94a3b8" },
+      blockNavCount: { fontSize:12, fontWeight:700, color:"#e2e8f0", marginTop:2 },
+      blockDetail: { padding:"0 12px" },
+      blockDetailHeader: {
+        display:"flex", justifyContent:"space-between", alignItems:"center",
+        padding:"14px 4px 10px",
+      },
+      blockDetailTitle: { fontSize:16, fontWeight:700, color:"#e2e8f0" },
+      blockDetailSub: { fontSize:12, color:"#64748b", marginTop:2 },
+      addBtn: {
+        background:"transparent", border:"1px solid #334155",
+        color:"#94a3b8", borderRadius:6, padding:"5px 10px",
+        fontSize:12, cursor:"pointer",
+      },
+      addForm: {
+        background:"#1e293b", borderRadius:8, padding:12,
+        marginBottom:8,
+      },
+      addInput: {
+        width:"100%", background:"#0f172a", border:"1px solid #334155",
+        color:"#e2e8f0", borderRadius:6, padding:"6px 10px",
+        fontSize:13, outline:"none", boxSizing:"border-box",
+        marginBottom:8,
+      },
+      addFormRow: { display:"flex", gap:8, alignItems:"center" },
+      addEstInput: {
+        width:60, background:"#0f172a", border:"1px solid #334155",
+        color:"#e2e8f0", borderRadius:6, padding:"4px 8px",
+        fontSize:13, outline:"none",
+      },
+      addEstLabel: { fontSize:12, color:"#94a3b8" },
+      addConfirmBtn: {
+        background:"#38bdf8", color:"#0f172a",
+        border:"none", borderRadius:6, padding:"4px 14px",
+        fontSize:12, fontWeight:700, cursor:"pointer",
+      },
+      addCancelBtn: {
+        background:"transparent", color:"#64748b",
+        border:"1px solid #334155", borderRadius:6, padding:"4px 10px",
+        fontSize:12, cursor:"pointer",
+      },
+      emptyBlock: {
+        color:"#475569", fontSize:13, textAlign:"center", padding:"24px 0",
+      },
+      taskRow: {
+        display:"flex", alignItems:"center", gap:10,
+        background:"#1e293b", borderRadius:8, padding:"10px 12px",
+        marginBottom:6, border:"1px solid #334155",
+      },
+      taskRowActive: {
+        background:"#1e3a5f", borderColor:"#38bdf8",
+      },
+      catDot: {
+        width:8, height:8, borderRadius:"50%", flexShrink:0,
+      },
+      taskInfo: { flex:1, minWidth:0 },
+      taskTitle: {
+        fontSize:13, color:"#e2e8f0", lineHeight:1.4,
+        wordBreak:"break-all",
+      },
+      taskMeta: { display:"flex", gap:6, marginTop:4, flexWrap:"wrap" },
+      catTag: {
+        fontSize:10, color:"#64748b",
+        background:"#0f172a", borderRadius:4, padding:"1px 5px",
+      },
+      estTag: {
+        fontSize:10, color:"#64748b",
+        background:"#0f172a", borderRadius:4, padding:"1px 5px",
+      },
+      runningTag: {
+        fontSize:10, color:"#38bdf8",
+        background:"#1e3a5f", borderRadius:4, padding:"1px 5px",
+      },
+      taskActions: { display:"flex", gap:6, flexShrink:0 },
+      startBtn: {
+        background:"#38bdf8", color:"#0f172a",
+        border:"none", borderRadius:6, padding:"5px 10px",
+        fontSize:13, cursor:"pointer", fontWeight:700,
+      },
+      completeBtn: {
+        background:"#34d399", color:"#0f172a",
+        border:"none", borderRadius:6, padding:"5px 10px",
+        fontSize:13, cursor:"pointer", fontWeight:700,
+      },
+      skipBtn: {
+        background:"transparent", color:"#475569",
+        border:"1px solid #334155", borderRadius:6, padding:"5px 8px",
+        fontSize:13, cursor:"pointer",
+      },
+      taskRowDone: {
+        display:"flex", alignItems:"center", gap:10,
+        background:"#0f172a", borderRadius:8, padding:"8px 12px",
+        marginBottom:4, border:"1px solid #1e293b", opacity:0.6,
+      },
+      taskDoneInfo: { flex:1, minWidth:0 },
+      taskDoneTitle: {
+        fontSize:12, color:"#64748b", textDecoration:"line-through",
+        wordBreak:"break-all",
+      },
+      taskDoneTime: { fontSize:10, color:"#475569", marginLeft:8 },
+      undoBtn: {
+        background:"transparent", color:"#475569",
+        border:"none", fontSize:14, cursor:"pointer", padding:"2px 6px",
+      },
+      skippedSection: { marginTop:12, paddingTop:8, borderTop:"1px solid #1e293b" },
+      skippedLabel: { fontSize:11, color:"#475569", marginBottom:4 },
+      skippedRow: {
+        display:"flex", justifyContent:"space-between", alignItems:"center",
+        padding:"4px 0",
+      },
+      skippedTitle: { fontSize:11, color:"#475569" },
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<Shanigama />);
+  </script>
+</body>
+</html>
