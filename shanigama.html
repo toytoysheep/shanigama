@@ -448,12 +448,14 @@
           fbDbRef.current = firebase.firestore(app);
           const auth = firebase.auth(app);
           setFbStatus("connecting");
+          // リダイレクト認証から戻ったときのエラー処理
+          auth.getRedirectResult().catch(e => setFbStatus("error:" + e.code));
           auth.onAuthStateChanged(user => {
             if (user) {
               setFbUser(user);
               setFbStatus("synced");
             } else {
-              auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
+              auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider())
                 .catch(e => setFbStatus("error:" + e.code));
             }
           });
