@@ -602,6 +602,15 @@
       const activeTask = tasks.find(t => t.id === activeTaskId);
       const h = now.getHours();
       const currentBlock = BLOCKS.find(b => h >= b.start && h < b.end);
+      const totalRemainingMin = tasks
+        .filter(t => !t.done && !t.skipped)
+        .reduce((sum, t) => {
+          if (t.id === activeTaskId && t.startTime) {
+            const rem = t.est - Math.floor((now - t.startTime) / 60000);
+            return sum + Math.max(0, rem);
+          }
+          return sum + t.est;
+        }, 0);
 
       if (!loaded) {
         return (
@@ -617,8 +626,12 @@
             <div style={styles.headerLeft}>
               <div style={{display:"flex", alignItems:"center", gap:8}}>
                 <div style={styles.appName}>しゃにがま</div>
-                {allDoneTime && (
+                {allDoneTime ? (
                   <div style={styles.allDoneBadge}>全完了 {timeStr(allDoneTime)}</div>
+                ) : totalCount > 0 && (
+                  <div style={{fontSize:13, color:"#94a3b8", letterSpacing:"0.02em"}}>
+                    {finishTimeStr(totalRemainingMin)}完了予定
+                  </div>
                 )}
               </div>
               <div style={styles.dateLabel}>
