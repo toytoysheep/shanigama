@@ -364,13 +364,18 @@
         gcalAutoSyncDone.current = true;
         setGcalSyncing(true);
         setGcalResult(null);
+        const autoSyncTimer = setTimeout(() => {
+          setGcalSyncing(false);
+          setGcalResult({ error: "timeout" });
+        }, 10000);
         window.google.accounts.oauth2.initTokenClient({
           client_id: gcalClientId,
           scope: "https://www.googleapis.com/auth/calendar.readonly",
           prompt: "",
           callback: async (response) => {
+            clearTimeout(autoSyncTimer);
             if (response.error) {
-              setGcalResult({ error: "auto", message: response.error });
+              setGcalResult({ error: "auto" });
               setGcalSyncing(false);
               return;
             }
@@ -380,7 +385,7 @@
               setGcalCalendarList(calendars);
               await doGcalSync(response.access_token, gcalSelectedIds);
             } catch(e) {
-              setGcalResult({ error: "auto", message: e.message });
+              setGcalResult({ error: "auto" });
               setGcalSyncing(false);
             }
           },
