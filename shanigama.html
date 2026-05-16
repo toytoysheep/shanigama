@@ -232,6 +232,18 @@
       return `${Math.floor(m/60)}時間${m%60}分`;
     }
 
+    function remainingStr(startMs, estMin) {
+      const elapsedMin = Math.floor((Date.now() - startMs) / 60000);
+      const rem = estMin - elapsedMin;
+      if (rem <= 0) return "超過中";
+      return `残り${rem}分`;
+    }
+
+    function finishTimeStr(addMinutes) {
+      const d = new Date(Date.now() + addMinutes * 60000);
+      return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    }
+
     function generateTodayTasks(dow, overrides = {}) {
       return REPEAT_TASKS
         .filter(t => t.days.includes(dow))
@@ -447,6 +459,14 @@
                 <div style={styles.activeTitle}>{activeTask.title}</div>
                 <div style={styles.activeTime}>
                   {timeStr(activeTask.startTime)} 〜 {elapsedStr(activeTask.startTime)} 経過
+                  {"　"}
+                  <span style={{color: (() => { const rem = activeTask.est - Math.floor((now - activeTask.startTime) / 60000); return rem <= 0 ? "#fb923c" : "#34d399"; })()}}>
+                    {remainingStr(activeTask.startTime, activeTask.est)}
+                  </span>
+                  {"　"}
+                  <span style={{color:"#94a3b8"}}>
+                    終了見込 {finishTimeStr(Math.max(0, activeTask.est - Math.floor((now - activeTask.startTime) / 60000)))}
+                  </span>
                 </div>
               </div>
               <button style={styles.activeDoneBtn} onClick={() => completeTask(activeTask.id)}>
@@ -482,6 +502,15 @@
             const block = BLOCKS.find(b => b.id === selectedBlock);
             const btasks = blockTasks(selectedBlock);
             const skipped = tasks.filter(t => t.block === selectedBlock && t.skipped);
+            const remainingEstMin = btasks
+              .filter(t => !t.done)
+              .reduce((sum, t) => {
+                if (t.id === activeTaskId && t.startTime) {
+                  const rem = t.est - Math.floor((now - t.startTime) / 60000);
+                  return sum + Math.max(0, rem);
+                }
+                return sum + t.est;
+              }, 0);
             return (
               <div style={styles.blockDetail}>
                 <div style={styles.blockDetailHeader}>
@@ -491,6 +520,11 @@
                     </div>
                     <div style={styles.blockDetailSub}>
                       {btasks.filter(t=>t.done).length}/{btasks.length} 完了
+                      {btasks.filter(t=>!t.done).length > 0 && (
+                        <span style={{marginLeft:8, color:"#38bdf8"}}>
+                          終了見込 {finishTimeStr(remainingEstMin)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <button style={styles.addBtn} onClick={() => setAddingTask(true)}>
