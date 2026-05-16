@@ -448,17 +448,34 @@
           fbDbRef.current = firebase.firestore(app);
           const auth = firebase.auth(app);
           setFbStatus("connecting");
-          // リダイレクト認証から戻ったときのエラー処理
-          auth.getRedirectResult().catch(e => setFbStatus("error:" + e.code));
+
+          // ユーザー状態の監視のみ（ここでリダイレクトしない）
           auth.onAuthStateChanged(user => {
             if (user) {
+              sessionStorage.removeItem("shanigama:auth");
               setFbUser(user);
               setFbStatus("synced");
-            } else {
-              auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider())
-                .catch(e => setFbStatus("error:" + e.code));
             }
           });
+
+          // リダイレクト結果を処理してからサインインを判定
+          auth.getRedirectResult()
+            .then(result => {
+              if (!result?.user) {
+                // リダイレクト由来のユーザーなし
+                // onAuthStateChanged がキャッシュセッションで発火するのを待つ
+                setTimeout(() => {
+                  if (!auth.currentUser && !sessionStorage.getItem("shanigama:auth")) {
+                    sessionStorage.setItem("shanigama:auth", "1");
+                    auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
+                  }
+                }, 800);
+              }
+            })
+            .catch(e => {
+              sessionStorage.removeItem("shanigama:auth");
+              setFbStatus("error:" + e.code);
+            });
         } catch(e) {
           setFbStatus("error:" + e.message);
         }
