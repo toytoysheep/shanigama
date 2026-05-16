@@ -295,6 +295,7 @@
       const [gcalSyncing, setGcalSyncing] = useState(false);
       const [gcalResult, setGcalResult] = useState(null);
       const [showGcalSetup, setShowGcalSetup] = useState(false);
+      const [showGcalMenu, setShowGcalMenu] = useState(false);
       const [gcalClientIdInput, setGcalClientIdInput] = useState("");
       const [gcalSelectedIds, setGcalSelectedIds] = useState(() => {
         const s = localStorage.getItem("shanigama:gcal_selected_ids");
@@ -697,9 +698,9 @@
               </button>
               <button
                 style={styles.gcalBtn}
-                onClick={() => handleGcalSync()}
+                onClick={() => gcalClientId ? setShowGcalMenu(true) : handleGcalSync()}
                 disabled={gcalSyncing}
-                title="Googleカレンダー同期"
+                title="Googleカレンダー"
               >
                 {gcalSyncing ? "⏳" : "📅"}
               </button>
@@ -778,6 +779,43 @@
                 <div style={styles.gcalModalBtns}>
                   <button style={styles.addConfirmBtn} onClick={saveGcalClientId}>保存して同期</button>
                   <button style={styles.addCancelBtn} onClick={() => setShowGcalSetup(false)}>キャンセル</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showGcalMenu && (
+            <div style={styles.gcalOverlay} onClick={() => setShowGcalMenu(false)}>
+              <div style={styles.gcalModal} onClick={e => e.stopPropagation()}>
+                <div style={styles.gcalModalTitle}>📅 Googleカレンダー</div>
+                <div style={{display:"flex", flexDirection:"column", gap:10, marginBottom:16}}>
+                  <button
+                    style={{...styles.addConfirmBtn, justifyContent:"flex-start", padding:"10px 16px", fontSize:14}}
+                    onClick={() => { setShowGcalMenu(false); handleGcalSync(); }}
+                  >
+                    🔄　今すぐ同期
+                    {gcalSelectedIds.length > 0 && <span style={{marginLeft:8, fontSize:11, color:"#94a3b8"}}>({gcalSelectedIds.length}カレンダー)</span>}
+                  </button>
+                  <button
+                    style={{...styles.addCancelBtn, justifyContent:"flex-start", padding:"10px 16px", fontSize:14}}
+                    onClick={() => {
+                      localStorage.removeItem("shanigama:gcal_selected_ids");
+                      setGcalSelectedIds([]);
+                      setShowGcalMenu(false);
+                      handleGcalSync();
+                    }}
+                  >
+                    ☑️　カレンダーを再選択
+                  </button>
+                  <button
+                    style={{...styles.addCancelBtn, justifyContent:"flex-start", padding:"10px 16px", fontSize:14}}
+                    onClick={() => { setShowGcalMenu(false); setGcalClientIdInput(""); setShowGcalSetup(true); }}
+                  >
+                    ⚙️　クライアントID設定
+                  </button>
+                </div>
+                <div style={styles.gcalModalBtns}>
+                  <button style={styles.addCancelBtn} onClick={() => setShowGcalMenu(false)}>閉じる</button>
                 </div>
               </div>
             </div>
