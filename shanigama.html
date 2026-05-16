@@ -195,6 +195,21 @@
       } catch (e) { console.error("save error", e); }
     }
 
+    const OVERRIDES_KEY = "shanigama:task_overrides";
+
+    function loadOverrides() {
+      try {
+        const raw = localStorage.getItem(OVERRIDES_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch { return {}; }
+    }
+
+    function saveOverrides(overrides) {
+      try {
+        localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
+      } catch (e) { console.error("save overrides error", e); }
+    }
+
     // ユーティリティ
     function todayStr() {
       const d = new Date();
@@ -217,21 +232,24 @@
       return `${Math.floor(m/60)}時間${m%60}分`;
     }
 
-    function generateTodayTasks(dow) {
+    function generateTodayTasks(dow, overrides = {}) {
       return REPEAT_TASKS
         .filter(t => t.days.includes(dow))
-        .map(t => ({
-          id: `${todayStr()}_${t.id}`,
-          repeatId: t.id,
-          title: t.title,
-          block: t.block,
-          cat: t.cat,
-          est: t.est,
-          done: false,
-          startTime: null,
-          endTime: null,
-          skipped: false,
-        }));
+        .map(t => {
+          const ov = overrides[t.id] || {};
+          return {
+            id: `${todayStr()}_${t.id}`,
+            repeatId: t.id,
+            title: t.title,
+            block: ov.block || t.block,
+            cat: t.cat,
+            est: ov.est != null ? ov.est : t.est,
+            done: false,
+            startTime: null,
+            endTime: null,
+            skipped: false,
+          };
+        });
     }
 
     // メインコンポーネント
@@ -244,6 +262,9 @@
       const [addingTask, setAddingTask] = useState(false);
       const [newTaskTitle, setNewTaskTitle] = useState("");
       const [newTaskEst, setNewTaskEst] = useState(5);
+      const [tab, setTab] = useState("today");
+      const [overrides, setOverrides] = useState({});
+      const [allDoneTime, setAllDoneTime] = useState(null);
 
       const dateStr = todayStr();
       const dow = getDayOfWeek();
@@ -255,20 +276,32 @@
       }, []);
 
       useEffect(() => {
+        const ov = loadOverrides();
+        setOverrides(ov);
         const saved = loadTodayData(dateStr);
         if (saved && saved.tasks) {
           setTasks(saved.tasks);
           setActiveTaskId(saved.activeTaskId || null);
+          setAllDoneTime(saved.allDoneTime || null);
         } else {
-          setTasks(generateTodayTasks(dow));
+          setTasks(generateTodayTasks(dow, ov));
         }
         setLoaded(true);
       }, []);
 
       useEffect(() => {
         if (!loaded) return;
-        saveTodayData(dateStr, { tasks, activeTaskId });
-      }, [tasks, activeTaskId, loaded]);
+        saveTodayData(dateStr, { tasks, activeTaskId, allDoneTime });
+      }, [tasks, activeTaskId, allDoneTime, loaded]);
+
+      useEffect(() => {
+        if (!loaded) return;
+        const total = tasks.filter(t => !t.skipped).length;
+        const done = tasks.filter(t => t.done && !t.skipped).length;
+        if (total > 0 && done === total && !allDoneTime) {
+          setAllDoneTime(Date.now());
+        }
+      }, [tasks, loaded]);
 
       useEffect(() => {
         if (!loaded) return;
@@ -355,7 +388,12 @@
         <div style={styles.root}>
           <div style={styles.header}>
             <div style={styles.headerLeft}>
-              <div style={styles.appName}>しゃにがま</div>
+              <div style={{display:"flex", alignItems:"center", gap:8}}>
+                <div style={styles.appName}>しゃにがま</div>
+                {allDoneTime && (
+                  <div style={styles.allDoneBadge}>全完了 {timeStr(allDoneTime)}</div>
+                )}
+              </div>
               <div style={styles.dateLabel}>
                 {now.getFullYear()}/{now.getMonth()+1}/{now.getDate()}（{DOW_LABEL[dow]}）
                 {"　"}
@@ -382,7 +420,27 @@
             </div>
           </div>
 
-          {activeTask && (
+          {/* タブナビ */}
+          <div style={styles.tabNav}>
+            <button
+              style={{...styles.tabBtn, ...(tab==="today" ? styles.tabBtnActive : {})}}
+              onClick={() => setTab("today")}
+            >今日</button>
+            <button
+              style={{...styles.tabBtn, ...(tab==="edit" ? styles.tabBtnActive : {})}}
+              onClick={() => setTab("edit")}
+            >タスク編集</button>
+          </div>
+
+          {tab === "edit" && (
+            <EditTab overrides={overrides} onChangeOverride={(id, field, val) => {
+              const next = { ...overrides, [id]: { ...(overrides[id] || {}), [field]: val } };
+              setOverrides(next);
+              saveOverrides(next);
+            }} />
+          )}
+
+          {tab === "today" && activeTask && (
             <div style={styles.activeBar}>
               <div style={styles.activeIcon}>▶</div>
               <div style={styles.activeInfo}>
@@ -397,7 +455,7 @@
             </div>
           )}
 
-          <div style={styles.blockNav}>
+          {tab === "today" && <div style={styles.blockNav}>
             {BLOCKS.map(b => {
               const btasks = blockTasks(b.id);
               const bdone = btasks.filter(t=>t.done).length;
@@ -418,9 +476,9 @@
                 </button>
               );
             })}
-          </div>
+          </div>}
 
-          {selectedBlock && (() => {
+          {tab === "today" && selectedBlock && (() => {
             const block = BLOCKS.find(b => b.id === selectedBlock);
             const btasks = blockTasks(selectedBlock);
             const skipped = tasks.filter(t => t.block === selectedBlock && t.skipped);
@@ -494,6 +552,57 @@
               </div>
             );
           })()}
+        </div>
+      );
+    }
+
+    // リピートタスク編集タブ
+    function EditTab({ overrides, onChangeOverride }) {
+      const grouped = BLOCKS.map(b => ({
+        block: b,
+        tasks: REPEAT_TASKS.filter(t => {
+          const ov = overrides[t.id];
+          return (ov && ov.block ? ov.block : t.block) === b.id;
+        }),
+      })).filter(g => g.tasks.length > 0);
+
+      return (
+        <div style={styles.editTab}>
+          <div style={styles.editNote}>※ 変更は翌日のタスク生成から反映されます</div>
+          {grouped.map(({ block, tasks }) => (
+            <div key={block.id} style={styles.editGroup}>
+              <div style={styles.editGroupTitle}>{block.label}　{block.title}</div>
+              {tasks.map(t => {
+                const ov = overrides[t.id] || {};
+                const curBlock = ov.block || t.block;
+                const curEst = ov.est != null ? ov.est : t.est;
+                return (
+                  <div key={t.id} style={styles.editRow}>
+                    <div style={styles.editTaskTitle}>{t.title}</div>
+                    <div style={styles.editControls}>
+                      <select
+                        style={styles.editSelect}
+                        value={curBlock}
+                        onChange={e => onChangeOverride(t.id, "block", e.target.value)}
+                      >
+                        {BLOCKS.map(b => (
+                          <option key={b.id} value={b.id}>{b.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        style={styles.editEstInput}
+                        type="number"
+                        min={1} max={180}
+                        value={curEst}
+                        onChange={e => onChangeOverride(t.id, "est", Number(e.target.value))}
+                      />
+                      <span style={styles.addEstLabel}>分</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       );
     }
@@ -721,6 +830,65 @@
         padding:"4px 0",
       },
       skippedTitle: { fontSize:11, color:"#475569" },
+
+      // 全完了バッジ
+      allDoneBadge: {
+        fontSize:12, fontWeight:700, color:"#34d399",
+        background:"#052e16", borderRadius:6, padding:"2px 8px",
+        border:"1px solid #34d399",
+      },
+
+      // タブナビ
+      tabNav: {
+        display:"flex", gap:0,
+        borderBottom:"1px solid #1e293b",
+        background:"#0f172a",
+      },
+      tabBtn: {
+        flex:1, padding:"10px 0",
+        background:"transparent", border:"none",
+        color:"#64748b", fontSize:13, cursor:"pointer",
+        borderBottom:"2px solid transparent",
+      },
+      tabBtnActive: {
+        color:"#38bdf8", borderBottom:"2px solid #38bdf8",
+      },
+
+      // 編集タブ
+      editTab: { padding:"8px 12px 40px" },
+      editNote: {
+        fontSize:11, color:"#475569", textAlign:"center",
+        padding:"8px 0 12px",
+      },
+      editGroup: { marginBottom:16 },
+      editGroupTitle: {
+        fontSize:13, fontWeight:700, color:"#94a3b8",
+        padding:"6px 4px 4px",
+        borderBottom:"1px solid #1e293b",
+        marginBottom:4,
+      },
+      editRow: {
+        display:"flex", alignItems:"center",
+        padding:"6px 4px", gap:8,
+        borderBottom:"1px solid #0f172a",
+      },
+      editTaskTitle: {
+        flex:1, fontSize:12, color:"#cbd5e1",
+        wordBreak:"break-all", lineHeight:1.4,
+      },
+      editControls: {
+        display:"flex", alignItems:"center", gap:6, flexShrink:0,
+      },
+      editSelect: {
+        background:"#1e293b", border:"1px solid #334155",
+        color:"#e2e8f0", borderRadius:6, padding:"3px 6px",
+        fontSize:11, outline:"none",
+      },
+      editEstInput: {
+        width:48, background:"#1e293b", border:"1px solid #334155",
+        color:"#e2e8f0", borderRadius:6, padding:"3px 6px",
+        fontSize:11, outline:"none",
+      },
     };
 
     const root = ReactDOM.createRoot(document.getElementById("root"));
