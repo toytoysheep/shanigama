@@ -224,6 +224,21 @@
       } catch (e) { console.error("save overrides error", e); }
     }
 
+    const CUSTOM_TASKS_KEY = "shanigama:custom_tasks";
+
+    function loadCustomTasks() {
+      try {
+        const raw = localStorage.getItem(CUSTOM_TASKS_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch { return []; }
+    }
+
+    function saveCustomTasks(tasks) {
+      try {
+        localStorage.setItem(CUSTOM_TASKS_KEY, JSON.stringify(tasks));
+      } catch (e) { console.error("save custom tasks error", e); }
+    }
+
     // ユーティリティ
     function todayStr() {
       const d = new Date();
@@ -258,9 +273,15 @@
       return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
     }
 
-    function generateTodayTasks(dow, overrides = {}) {
-      return REPEAT_TASKS
-        .filter(t => t.days.includes(dow))
+    function generateTodayTasks(dow, overrides = {}, customTasksList = []) {
+      const todayDate = new Date().getDate();
+      const allMaster = [...REPEAT_TASKS, ...customTasksList];
+      return allMaster
+        .filter(t => {
+          if (overrides[t.id]?.disabled) return false;
+          if (t.monthDay != null) return todayDate === t.monthDay;
+          return t.days.includes(dow);
+        })
         .map(t => {
           const ov = overrides[t.id] || {};
           return {
@@ -268,7 +289,7 @@
             repeatId: t.id,
             title: t.title,
             block: ov.block || t.block,
-            cat: t.cat,
+            cat: t.cat || "その他",
             est: ov.est != null ? ov.est : t.est,
             done: false,
             startTime: null,
@@ -290,6 +311,7 @@
       const [newTaskEst, setNewTaskEst] = useState(5);
       const [tab, setTab] = useState("today");
       const [overrides, setOverrides] = useState({});
+      const [customTasks, setCustomTasks] = useState([]);
       const [allDoneTime, setAllDoneTime] = useState(null);
       const [gcalClientId, setGcalClientId] = useState(() => localStorage.getItem("shanigama:gcal_client_id") || "");
       const [gcalSyncing, setGcalSyncing] = useState(false);
@@ -324,14 +346,16 @@
 
       useEffect(() => {
         const ov = loadOverrides();
+        const ct = loadCustomTasks();
         setOverrides(ov);
+        setCustomTasks(ct);
         const saved = loadTodayData(dateStr);
         if (saved && saved.tasks) {
           setTasks(saved.tasks);
           setActiveTaskId(saved.activeTaskId || null);
           setAllDoneTime(saved.allDoneTime || null);
         } else {
-          setTasks(generateTodayTasks(dow, ov));
+          setTasks(generateTodayTasks(dow, ov, ct));
         }
         setLoaded(true);
       }, []);
@@ -500,6 +524,19 @@
         ref.set({ clientId, selectedIds }).catch(e => console.error("fb save gcal", e));
       }
 
+      async function fbLoadCustomTasks() {
+        const ref = fbUserDoc(["settings", "customTasks"]);
+        if (!ref) return null;
+        const snap = await ref.get();
+        return snap.exists ? (snap.data().tasks || null) : null;
+      }
+
+      function fbSaveCustomTasks(tasks) {
+        const ref = fbUserDoc(["settings", "customTasks"]);
+        if (!ref) return;
+        ref.set({ tasks }).catch(e => console.error("fb save customTasks", e));
+      }
+
       // Firebase 初期化（起動時に自動実行）
       useEffect(() => {
         try {
@@ -554,8 +591,11 @@
         if (!fbUser) return;
         (async () => {
           try {
-            const [fbOv, fbDay, fbGcal] = await Promise.all([fbLoadOv(), fbLoadDay(dateStr), fbLoadGcalSettings()]);
+            const [fbOv, fbDay, fbGcal, fbCt] = await Promise.all([
+              fbLoadOv(), fbLoadDay(dateStr), fbLoadGcalSettings(), fbLoadCustomTasks()
+            ]);
             if (fbOv) { setOverrides(fbOv); saveOverrides(fbOv); }
+            if (fbCt) { setCustomTasks(fbCt); saveCustomTasks(fbCt); }
             if (fbDay && fbDay.tasks) {
               setTasks(fbDay.tasks);
               setActiveTaskId(fbDay.activeTaskId || null);
@@ -704,6 +744,28 @@
         handleGcalSync(id);
       }
       // ─────────────────────────────────────────────────
+
+      function handleAddCustomTask(task) {
+        const newTask = { id: `custom_${Date.now()}`, cat: "その他", ...task };
+        const next = [...customTasks, newTask];
+        setCustomTasks(next);
+        saveCustomTasks(next);
+        fbSaveCustomTasks(next);
+      }
+
+      function handleDeleteTask(taskId) {
+        if (REPEAT_TASKS.find(t => t.id === taskId)) {
+          const next = { ...overrides, [taskId]: { ...(overrides[taskId] || {}), disabled: true } };
+          setOverrides(next);
+          saveOverrides(next);
+          fbSaveOv(next);
+        } else {
+          const next = customTasks.filter(t => t.id !== taskId);
+          setCustomTasks(next);
+          saveCustomTasks(next);
+          fbSaveCustomTasks(next);
+        }
+      }
 
       const blockTasks = (blockId) =>
         tasks.filter(t => t.block === blockId && !t.skipped);
@@ -942,12 +1004,18 @@
           )}
 
           {tab === "edit" && (
-            <EditTab overrides={overrides} onChangeOverride={(id, field, val) => {
-              const next = { ...overrides, [id]: { ...(overrides[id] || {}), [field]: val } };
-              setOverrides(next);
-              saveOverrides(next);
-              fbSaveOv(next);
-            }} />
+            <EditTab
+              overrides={overrides}
+              customTasks={customTasks}
+              onChangeOverride={(id, field, val) => {
+                const next = { ...overrides, [id]: { ...(overrides[id] || {}), [field]: val } };
+                setOverrides(next);
+                saveOverrides(next);
+                fbSaveOv(next);
+              }}
+              onAddTask={handleAddCustomTask}
+              onDeleteTask={handleDeleteTask}
+            />
           )}
 
           {tab === "today" && activeTask && (
@@ -1089,18 +1157,148 @@
     }
 
     // リピートタスク編集タブ
-    function EditTab({ overrides, onChangeOverride }) {
+    function EditTab({ overrides, customTasks, onChangeOverride, onAddTask, onDeleteTask }) {
+      const [showAddForm, setShowAddForm] = useState(false);
+      const [newTitle, setNewTitle] = useState("");
+      const [newBlock, setNewBlock] = useState("6-8");
+      const [newEst, setNewEst] = useState(5);
+      const [newRepeatType, setNewRepeatType] = useState("daily");
+      const [newWeekDays, setNewWeekDays] = useState([1,2,3,4,5]);
+      const [newMonthDay, setNewMonthDay] = useState(1);
+      const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+      const DOW_LABELS = ["日","月","火","水","木","金","土"];
+
+      function buildDays() {
+        if (newRepeatType === 'daily')    return [0,1,2,3,4,5,6];
+        if (newRepeatType === 'weekly')   return newWeekDays.length ? [...newWeekDays].sort((a,b)=>a-b) : [1];
+        if (newRepeatType === 'weekdays') return [1,2,3,4,5];
+        if (newRepeatType === 'weekends') return [0,6];
+        return null;
+      }
+
+      function handleAdd() {
+        if (!newTitle.trim()) return;
+        const days = buildDays();
+        onAddTask({
+          title: newTitle.trim(),
+          block: newBlock,
+          est: newEst,
+          ...(newRepeatType === 'monthly'
+            ? { days: [], monthDay: newMonthDay }
+            : { days }),
+        });
+        setNewTitle(""); setNewEst(5); setNewRepeatType("daily");
+        setNewWeekDays([1,2,3,4,5]); setNewMonthDay(1); setShowAddForm(false);
+      }
+
+      const allMaster = [
+        ...REPEAT_TASKS.map(t => ({ ...t, isCustom: false })),
+        ...(customTasks || []).map(t => ({ ...t, isCustom: true })),
+      ].filter(t => !overrides[t.id]?.disabled);
+
       const grouped = BLOCKS.map(b => ({
         block: b,
-        tasks: REPEAT_TASKS.filter(t => {
-          const ov = overrides[t.id];
-          return (ov && ov.block ? ov.block : t.block) === b.id;
-        }),
+        tasks: allMaster.filter(t => (overrides[t.id]?.block || t.block) === b.id),
       })).filter(g => g.tasks.length > 0);
 
       return (
         <div style={styles.editTab}>
           <div style={styles.editNote}>※ 変更は翌日のタスク生成から反映されます</div>
+
+          {!showAddForm && (
+            <button style={styles.addTaskMasterBtn} onClick={() => setShowAddForm(true)}>
+              ＋ タスクを追加
+            </button>
+          )}
+
+          {showAddForm && (
+            <div style={styles.addTaskForm}>
+              <div style={styles.addTaskFormTitle}>新規タスクを追加</div>
+
+              <label style={styles.formLabel}>タスク名</label>
+              <input
+                style={{...styles.addInput, marginBottom:0}}
+                placeholder="タスク名を入力"
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                autoFocus
+              />
+
+              <label style={styles.formLabel}>時間ブロック</label>
+              <select
+                style={{...styles.editSelect, width:"100%", padding:"6px 8px"}}
+                value={newBlock}
+                onChange={e => setNewBlock(e.target.value)}
+              >
+                {BLOCKS.map(b => (
+                  <option key={b.id} value={b.id}>{b.label}　{b.title}</option>
+                ))}
+              </select>
+
+              <label style={styles.formLabel}>所要時間</label>
+              <div style={{display:"flex", alignItems:"center", gap:6}}>
+                <input
+                  style={{...styles.editEstInput, width:72}}
+                  type="number" min={1} max={180}
+                  value={newEst}
+                  onChange={e => setNewEst(Number(e.target.value))}
+                />
+                <span style={styles.addEstLabel}>分</span>
+              </div>
+
+              <label style={styles.formLabel}>繰り返し</label>
+              <select
+                style={{...styles.editSelect, width:"100%", padding:"6px 8px"}}
+                value={newRepeatType}
+                onChange={e => setNewRepeatType(e.target.value)}
+              >
+                <option value="daily">毎日</option>
+                <option value="weekly">毎週（曜日を選ぶ）</option>
+                <option value="monthly">毎月（日付を選ぶ）</option>
+                <option value="weekdays">平日のみ（月〜金）</option>
+                <option value="weekends">週末のみ（土・日）</option>
+              </select>
+
+              {newRepeatType === 'weekly' && (
+                <div style={styles.dowCheckboxes}>
+                  {DOW_LABELS.map((label, i) => (
+                    <label key={i} style={styles.dowLabel}>
+                      <input
+                        type="checkbox"
+                        checked={newWeekDays.includes(i)}
+                        onChange={e => setNewWeekDays(prev =>
+                          e.target.checked
+                            ? [...prev, i].sort((a,b)=>a-b)
+                            : prev.filter(d => d !== i)
+                        )}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {newRepeatType === 'monthly' && (
+                <div style={{display:"flex", alignItems:"center", gap:8, marginTop:8}}>
+                  <span style={{fontSize:12, color:"#94a3b8"}}>毎月</span>
+                  <input
+                    style={{...styles.editEstInput, width:56}}
+                    type="number" min={1} max={31}
+                    value={newMonthDay}
+                    onChange={e => setNewMonthDay(Number(e.target.value))}
+                  />
+                  <span style={styles.addEstLabel}>日</span>
+                </div>
+              )}
+
+              <div style={{display:"flex", gap:8, marginTop:16}}>
+                <button style={styles.addConfirmBtn} onClick={handleAdd}>追加する</button>
+                <button style={styles.addCancelBtn} onClick={() => { setShowAddForm(false); setNewTitle(""); }}>キャンセル</button>
+              </div>
+            </div>
+          )}
+
           {grouped.map(({ block, tasks }) => (
             <div key={block.id} style={styles.editGroup}>
               <div style={styles.editGroupTitle}>{block.label}　{block.title}</div>
@@ -1108,28 +1306,52 @@
                 const ov = overrides[t.id] || {};
                 const curBlock = ov.block || t.block;
                 const curEst = ov.est != null ? ov.est : t.est;
+                const isConfirming = confirmDeleteId === t.id;
                 return (
                   <div key={t.id} style={styles.editRow}>
-                    <div style={styles.editTaskTitle}>{t.title}</div>
-                    <div style={styles.editControls}>
-                      <select
-                        style={styles.editSelect}
-                        value={curBlock}
-                        onChange={e => onChangeOverride(t.id, "block", e.target.value)}
-                      >
-                        {BLOCKS.map(b => (
-                          <option key={b.id} value={b.id}>{b.label}</option>
-                        ))}
-                      </select>
-                      <input
-                        style={styles.editEstInput}
-                        type="number"
-                        min={1} max={180}
-                        value={curEst}
-                        onChange={e => onChangeOverride(t.id, "est", Number(e.target.value))}
-                      />
-                      <span style={styles.addEstLabel}>分</span>
-                    </div>
+                    {isConfirming ? (
+                      <div style={{flex:1, display:"flex", alignItems:"center", gap:8}}>
+                        <span style={{fontSize:12, color:"#f87171", flex:1}}>本当に削除しますか？</span>
+                        <button
+                          style={{...styles.addConfirmBtn, background:"#ef4444", padding:"3px 10px"}}
+                          onClick={() => { onDeleteTask(t.id); setConfirmDeleteId(null); }}
+                        >削除</button>
+                        <button
+                          style={{...styles.addCancelBtn, padding:"3px 10px"}}
+                          onClick={() => setConfirmDeleteId(null)}
+                        >戻す</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={styles.editTaskTitle}>
+                          {t.isCustom && <span style={styles.customBadge}>追加</span>}
+                          {t.title}
+                        </div>
+                        <div style={styles.editControls}>
+                          <select
+                            style={styles.editSelect}
+                            value={curBlock}
+                            onChange={e => onChangeOverride(t.id, "block", e.target.value)}
+                          >
+                            {BLOCKS.map(b => (
+                              <option key={b.id} value={b.id}>{b.label}</option>
+                            ))}
+                          </select>
+                          <input
+                            style={styles.editEstInput}
+                            type="number"
+                            min={1} max={180}
+                            value={curEst}
+                            onChange={e => onChangeOverride(t.id, "est", Number(e.target.value))}
+                          />
+                          <span style={styles.addEstLabel}>分</span>
+                          <button
+                            style={styles.deleteTaskBtn}
+                            onClick={() => setConfirmDeleteId(t.id)}
+                          >🗑</button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 );
               })}
@@ -1420,6 +1642,40 @@
         width:48, background:"#1e293b", border:"1px solid #334155",
         color:"#e2e8f0", borderRadius:6, padding:"3px 6px",
         fontSize:11, outline:"none",
+      },
+      addTaskMasterBtn: {
+        display:"block", width:"100%", marginBottom:12,
+        background:"transparent", border:"1.5px dashed #334155",
+        color:"#38bdf8", borderRadius:8, padding:"10px",
+        fontSize:13, cursor:"pointer", textAlign:"center",
+      },
+      addTaskForm: {
+        background:"#1e293b", borderRadius:10, padding:16,
+        border:"1px solid #334155", marginBottom:16,
+      },
+      addTaskFormTitle: {
+        fontSize:14, fontWeight:700, color:"#e2e8f0", marginBottom:12,
+      },
+      formLabel: {
+        display:"block", fontSize:11, color:"#94a3b8",
+        marginBottom:4, marginTop:10,
+      },
+      dowCheckboxes: {
+        display:"flex", gap:10, marginTop:10, flexWrap:"wrap",
+      },
+      dowLabel: {
+        display:"flex", alignItems:"center", gap:4,
+        fontSize:13, color:"#cbd5e1", cursor:"pointer",
+      },
+      deleteTaskBtn: {
+        background:"transparent", border:"1px solid #334155",
+        color:"#64748b", borderRadius:6, padding:"2px 6px",
+        fontSize:12, cursor:"pointer",
+      },
+      customBadge: {
+        display:"inline-block", fontSize:9, fontWeight:700,
+        color:"#38bdf8", background:"#1e3a5f", borderRadius:4,
+        padding:"1px 4px", marginRight:5, verticalAlign:"middle",
       },
 
       // Google Calendar
