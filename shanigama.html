@@ -816,6 +816,11 @@
             </div>
             <div style={styles.headerRight}>
               <button
+                style={styles.gcalBtn}
+                onClick={() => location.reload()}
+                title="リロード（日付が変わったら押す）"
+              >🔄</button>
+              <button
                 style={{...styles.gcalBtn, ...(fbStatus==="synced" ? styles.fbBtnSynced : fbStatus.startsWith("error") ? styles.fbBtnError : {})}}
                 onClick={() => fbStatus === "synced" ? setShowFbSetup(true) : handleFbSignIn()}
                 title={fbStatus === "synced" ? `同期中: ${fbUser?.displayName || fbUser?.email}` : fbStatus === "connecting" ? "接続中..." : "Firebaseを設定"}
